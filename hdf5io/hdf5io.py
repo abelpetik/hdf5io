@@ -123,6 +123,8 @@ The create_ functions should not expect any parameters but have to access data f
         Opens/creates the hdf5 file for reading/writing.
         '''
         self.lockfile_path = lockfile_path
+        self.hdf5file_lock = None
+        self.hdf5filelock_filename = None
         if not hasattr(self, 'attrnames'):
             self.attrnames = []
         self.ramlimit = RAMLIMIT
@@ -177,14 +179,46 @@ The create_ functions should not expect any parameters but have to access data f
         self.close()
         return False  # does not suppress eventual exceptions
 
+    def _cleanup_stale_lockfile_if_owned(self):
+        lockfilename = getattr(self, 'hdf5filelock_filename', None)
+        if not self.lockfile_path or not lockfilename:
+            return
+        if os.path.basename(os.path.dirname(lockfilename)) != 'filelocks':
+            return
+        if not os.path.exists(lockfilename):
+            return
+        try:
+            with open(lockfilename, 'r') as lockf:
+                lock_content = lockf.read()
+            pid_candidates = re.findall(r'\d+', lock_content)
+            if len(pid_candidates) == 0:
+                return
+            if int(pid_candidates[-1]) != os.getpid():
+                return
+            os.remove(lockfilename)
+        except Exception:
+            # Best-effort cleanup only; never fail hdf5 operations on lock cleanup.
+            pass
+
+    def _safe_close_lock(self, remove_lockfile=False):
+        if self.lockfile_path and getattr(self, 'hdf5file_lock', None) is not None:
+            try:
+                self.hdf5file_lock.close()
+            except Exception:
+                pass
+            finally:
+                self.hdf5file_lock = None
+        if remove_lockfile:
+            self._cleanup_stale_lockfile_if_owned()
+
     def open_with_lock(self, filemode='a'):
         with lockman.lockpool[self.filelockkey].acquire(False):
             try:
                 if self.lockfile_path:
                     if not os.path.exists(os.path.join(self.lockfile_path, 'filelocks')):
                         os.makedirs(os.path.join(self.lockfile_path, 'filelocks'))
-                    hdf5filelock_filename = os.path.join(os.path.join(self.lockfile_path, 'filelocks', os.path.split(self.filename)[1][:-3]+'.lock'))
-                    self.hdf5file_lock = zc.lockfile.LockFile(hdf5filelock_filename) # cross platform file lock, but puts an extra lock file in the file system
+                    self.hdf5filelock_filename = os.path.join(os.path.join(self.lockfile_path, 'filelocks', os.path.split(self.filename)[1][:-3]+'.lock'))
+                    self.hdf5file_lock = zc.lockfile.LockFile(self.hdf5filelock_filename) # cross platform file lock, but puts an extra lock file in the file system
                 try:
                     self.h5f = tables.open_file(self.filename, mode = filemode)
                 except:
@@ -199,9 +233,11 @@ The create_ functions should not expect any parameters but have to access data f
                     #    if self.lockfile_path:self.hdf5file_lock.close()
                      #   raise RuntimeError('Compression library used for creating a CArray in this file is not available in the pytables installation on this computer')
             except zc.lockfile.LockError:
-                with open(hdf5filelock_filename, 'r') as lockf:
-                    lockf.seek(1)
-                    pidinlock = lockf.read().strip()
+                pidinlock = 'unknown'
+                if self.hdf5filelock_filename and os.path.exists(self.hdf5filelock_filename):
+                    with open(self.hdf5filelock_filename, 'r') as lockf:
+                        lockf.seek(1)
+                        pidinlock = lockf.read().strip()
                 raise RuntimeError(str(os.getpid())+" cannot lock file "+self.filename+" that is currently locked by pid "+ pidinlock)
             except:
                 traceback.print_exc()
@@ -210,9 +246,9 @@ The create_ functions should not expect any parameters but have to access data f
             finally:
                 if hasattr(self, 'h5f') and self.h5f.isopen and not self.file_always_open:
                     self.h5f.close()
-                if hasattr(self, 'hdf5file_lock') and self.lockfile_path: self.hdf5file_lock.close()
-            
-    
+                self._safe_close_lock(remove_lockfile=True)
+
+
     def copy_file(self, newname, overwrite=False):
         '''copy, when file exists it will not overwrite'''
         if not overwrite and os.path.exists(newname):
@@ -242,7 +278,7 @@ The create_ functions should not expect any parameters but have to access data f
                     closeit = False
                 if self.h5f.isopen and self.h5f.mode!='a':
                     self.h5f.close()
-                    if self.lockfile_path: self.hdf5file_lock.close()
+                    self._safe_close_lock(remove_lockfile=True)
                     self.open_with_lock('a')
                     print(('write opened '+self.filename))
                     reopen = True
@@ -255,8 +291,8 @@ The create_ functions should not expect any parameters but have to access data f
                 if closeit or reopen:
                     print(('hdf5io write context closes file'+self.filename))
                     self.h5f.close()
-                    if self.lockfile_path: self.hdf5file_lock.close()
-                if reopen: 
+                    self._safe_close_lock(remove_lockfile=True)
+                if reopen:
                     self.open_with_lock('a')
                     print(('write reopened '+self.filename))
 
@@ -283,14 +319,15 @@ The create_ functions should not expect any parameters but have to access data f
                 if closeit:
                     print('hdf5io read closes file')
                     self.h5f.close()
-                    if self.lockfile_path: self.hdf5file_lock.close()
-        
+                    self._safe_close_lock(remove_lockfile=True)
+
 #    def __del__(self): #do not use: it is allowed to open the same file in multiple threads, locking ensures this is safe
    #     self.close()
 
     def __finalize__(self):
         try:
             self.h5f.close()
+            self._safe_close_lock(remove_lockfile=True)
             print('hdf5io finalizer closes file')
         except Exception as detail:
             print(detail)
@@ -873,6 +910,7 @@ The create_ functions should not expect any parameters but have to access data f
             with lockman.lockpool[self.filelockkey].acquire(False):
                 self.h5f.flush()
                 self.h5f.close()
+        self._safe_close_lock(remove_lockfile=True)
         log.debug("aborted, file closed "+self.filename)
 
 
