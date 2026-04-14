@@ -219,7 +219,7 @@ The create_ functions should not expect any parameters but have to access data f
             raise IOError('Destination hdf file exists and overwrite is set to False')
         newh = Hdf5io(newname, lockfile_path=self.lockfile_path) #opens with locking
         newh.h5f.close() #closes hdf5 file but does not release the lock
-        self.h5f.copy_file(newname, overwrite=True) # this operation does not check the lock but 
+        self.h5f.copy_file(newname, overwrite=True) # this operation does not check the lock but
         #we have it so, no problem. Set overwrite to true since we just created the destination hdf file to make sur#release the lock for the new file
 
     @property
@@ -234,7 +234,7 @@ The create_ functions should not expect any parameters but have to access data f
             print((os.path.split(self.filename)[1]+'write blocks:'+str(self.blocking_lock)))
         with lockman.lockpool[self.filelockkey].acquire(self.blocking_lock):#self.filelock:#.writelock:
             try:
-                if not self.h5f.isopen: 
+                if not self.h5f.isopen:
                     closeit=True
                     self.open_with_lock('a')
                     print(('write opened '+self.filename))
@@ -252,16 +252,16 @@ The create_ functions should not expect any parameters but have to access data f
             except:
                 raise
             finally:
-                if closeit or reopen: 
+                if closeit or reopen:
                     print(('hdf5io write context closes file'+self.filename))
                     self.h5f.close()
                     if self.lockfile_path: self.hdf5file_lock.close()
                 if reopen: 
                     self.open_with_lock('a')
                     print(('write reopened '+self.filename))
-        
 
-    @property        
+
+    @property
     @contextmanager
     def read(self):
         #with self.filelock.readlock:
@@ -269,25 +269,25 @@ The create_ functions should not expect any parameters but have to access data f
             print((os.path.split(self.filename)[1]+'read blocks:'+str(self.blocking_lock)))
         with lockman.lockpool[self.filelockkey].acquire(self.blocking_lock):
             try:
-                if not self.h5f.isopen: 
+                if not self.h5f.isopen:
                     closeit=True
                     self.open_with_lock('a')
                     print(('read opened '+self.filename))
-                else: 
+                else:
                     closeit = False
                 yield
             except:
                 traceback.print_exc()
                 raise
-            finally: 
-                if closeit: 
+            finally:
+                if closeit:
                     print('hdf5io read closes file')
                     self.h5f.close()
                     if self.lockfile_path: self.hdf5file_lock.close()
         
 #    def __del__(self): #do not use: it is allowed to open the same file in multiple threads, locking ensures this is safe
    #     self.close()
-    
+
     def __finalize__(self):
         try:
             self.h5f.close()
@@ -295,7 +295,7 @@ The create_ functions should not expect any parameters but have to access data f
         except Exception as detail:
             print(detail)
             print('finalizer could not close hdf5 file')
-            
+
     def close(self):
         '''You must call this method if you want to close the hdf5 file'''
         self._want_abort = 1
@@ -306,8 +306,8 @@ The create_ functions should not expect any parameters but have to access data f
         log.debug("will abort "+self.filename)
         self.cleanup() # let running processes know that they must stop
     #print self.filename+' closed in hdf5io'
-        
-    
+
+
     def isUsable(self):
         '''returns true if hdf5 file is usable, i.e. not corrupted'''
         if not os.path.exists(self.filename):# or tables.is_pytables_file(self.filename) is None:
@@ -344,7 +344,7 @@ The create_ functions should not expect any parameters but have to access data f
                         try:
                             mynode = getattr(self, vname)
                            # dir(self)
-                        except: 
+                        except:
                             traceback.print_exc()
                 else:
                     log.debug(errormsg+';'+vname+' not found in memory or in the hdf5 file')
@@ -363,13 +363,13 @@ The create_ functions should not expect any parameters but have to access data f
             print(detail)
             log.debug(detail)
         return mynode
-        
+
     def managed_names(self):
         '''collects variable names from methods that start with 'create_'
         These data are managed by this class and transfer between hdf5 file and memory is done automatically'''
         import inspect
         return ['rawdata']+[method[7:] for method in self.__dict__ if inspect.ismethod(getattr(self, method)) and method.find('create_')>-1]
-    
+
     def check_before_file_operation(self, names):
         '''various checks to be performed before saving/loading '''
         self.attrnames = list(set(self.attrnames)) # make sure entries are unique
@@ -378,7 +378,7 @@ The create_ functions should not expect any parameters but have to access data f
         elif names is None:
             names = self.managed_names()+self.attrnames
         return names
-        
+
     def save(self, names=None, overwrite=True, path=None, verify=False, filters = filters, **kwargs):
         ''' Saves data to the hdf5 file. If name is omitted then all data managed by this class will be saved.
            Numpy array, recarray,(list of) list of arrays,  and dict are supported.'''
@@ -444,7 +444,7 @@ The create_ functions should not expect any parameters but have to access data f
         except Exception as e:
             print(e)
             raise
-        
+
     def save_vlarray(self, root, vn,  alist, filters=filters):
         myatom = tables.Atom.from_dtype(numpy.dtype(alist[0].dtype, (0, )*alist[0].ndim))
         vlarray = self.h5f.create_vlarray(root, vn, myatom,#(shape=()),
@@ -459,7 +459,7 @@ The create_ functions should not expect any parameters but have to access data f
         except:
             traceback.print_exc()
             pdb.set_trace()
-    
+
     def list2hdf(self, vp, vn, hp, filters=filters, overwrite=False, chunkshape=None):
         if len(vp)==0: #empty list
             self.h5f.create_array(hp, vn, 'empty list', "empty list")
@@ -477,7 +477,7 @@ The create_ functions should not expect any parameters but have to access data f
                 self.saveCArray(vpa, vpa.shape, tables.Atom.from_dtype(vpa.dtype), hp, vn, overwrite, filters, typepost=typepost, chunkshape=chunkshape)
             except:
                 raise
-        elif 'recarrays' in list_type:# is 'list_of_recarrays': 
+        elif 'recarrays' in list_type:# is 'list_of_recarrays':
             # list of recarrays that have the same fields
             root = self.h5f.create_group(hp, vn, vn+'_'+list_type)
             for d in range(len(vp[0].dtype)):
@@ -518,8 +518,8 @@ The create_ functions should not expect any parameters but have to access data f
         elif list_type == 'inhomogenous_list':  # TODO: could use bloscpack directly? Estimate pickle performance depdneing on datadepth and size
             datastream = numpy.array(pickle.dumps(vp))
             self.ndarray2hdf(datastream, vn+'inhomogenous_list', hp)
-                
-                
+
+
     def ndarray2hdf(self, vp, vn, hp, filters=filters, overwrite=False, typepost='', chunkshape=None):
         #vp contains the pointer to the actual numpy ndarray
         if isinstance(vp, str) or isinstance(vp, bytes):
@@ -543,11 +543,11 @@ The create_ functions should not expect any parameters but have to access data f
                 cvp = getattr(vp.view(numpy.recarray), fn)
                 vs = cvp.shape
                 self.saveCArray(cvp, vs, atom, root, fn, overwrite, filters)
-    
+
     def dict2hdf(self, vp, vn, hp, filters=filters, overwrite=False):
         '''Saves a python dict into the hdf5 file. There are restrictions on what elements a dict can have but
         this method can be updated to meet new needs.
-        This methods tries to determine if an item in the dict is anything other than (array or list) of numeric values. 
+        This methods tries to determine if an item in the dict is anything other than (array or list) of numeric values.
         Array (or list) of numeric values is simply saved as CArray (or attribute), other types are saved calling
         the appropriate xxx2hdf method recursively.
         '''
@@ -560,7 +560,7 @@ The create_ functions should not expect any parameters but have to access data f
         for fn in fnames:
             if vp[fn] is None:
                 vp[fn] = []
-            if hasattr(vp[fn], 'keys'): 
+            if hasattr(vp[fn], 'keys'):
                 self.dict2hdf(vp[fn], fn,root, filters,  overwrite)
                 continue
             if not isinstance(fn, str):
@@ -584,7 +584,7 @@ The create_ functions should not expect any parameters but have to access data f
             else:
                 self.ndarray2hdf(vp[fn], str(fn),root,  filters, overwrite, typepost=typepost)
 #                self.saveCArray(vp[fn], vs, atom, root, fn,overwrite,filters)
-                
+
     def saveCArray(self, vp, vs, atom, root, fn, overwrite, filters, typepost='', chunkshape=None):
         '''Saves a numpy array as CArray in the opened pytables file.
        vp is the reference to the actual data, vs is the shape of the array, root is the node under which the array has to be created
@@ -637,7 +637,7 @@ The create_ functions should not expect any parameters but have to access data f
                     continue
                 if len(self.find_variable_in_h5f(vname,path=path))>0  and not self._want_abort: # data is in the file but not available in the class instance, load
                     log.debug("loading "+vname)
-                    if not self._want_abort: 
+                    if not self._want_abort:
                         self.load_variable(vname, path=path)
                         successfully_loaded.append(vname)
         return successfully_loaded
@@ -655,7 +655,7 @@ The create_ functions should not expect any parameters but have to access data f
                 log.warning(path+' not found in '+self.filename)
                 return [], [] if return_path else []
             #else: # maybe we look for a variable that is split up into multiple leafs?
-            if hasattr(myroot._v_attrs, vn): 
+            if hasattr(myroot._v_attrs, vn):
                 if return_path:
                     hpath = [self.slash2dot(path)]
                 hasit = [vn] # variable is found as an attribute
@@ -674,13 +674,13 @@ The create_ functions should not expect any parameters but have to access data f
                 return hasit,hpath
             else:
                 return hasit
-            
+
     def slash2dot(self, slashedpath):
         if slashedpath =='/': return 'h5f.root'
         else:
             path= slashedpath.replace('/','.')
             return ('h5f.root'+path)
-        
+
     def dot2slash(self,dottedpath):
         '''converts a hdf5 path string from the format:
         'h5f.root' to '/'
@@ -688,7 +688,7 @@ The create_ functions should not expect any parameters but have to access data f
         startnode = dottedpath.replace('.','/')
         startnode = startnode[startnode.index('root')+4:] or '/'
         return startnode
-    
+
     def load_variable(self, vn, path=None):
         '''
         Loads the variable "vname" from the hdf5 file.
@@ -737,7 +737,7 @@ The create_ functions should not expect any parameters but have to access data f
             import traceback
             print((traceback.format_exc()))
             log.debug("error reading "+vn+" from "+self.filename)
-   
+
     def read_array(self, croot, vname):
         datanode = self.h5f.get_node(croot, vname)
         vname = datanode._v_name
@@ -794,7 +794,7 @@ The create_ functions should not expect any parameters but have to access data f
             myvar[vname] = coerce_if_string23(myvar[vname])
             if str(myvar[vname]) =='empty list': myvar[vname]=[]
         return myvar
-                        
+
     def hdf2ndarray(self, group):
         mydtype = [n._v_name for n in self.h5f.iter_nodes(group)]
         try:
@@ -811,7 +811,7 @@ The create_ functions should not expect any parameters but have to access data f
                 myvar[nodename] = self.h5f.get_node(group,nodename).read()
 
         return myvar
-      
+
     def hdf2recarray(self,group):
         '''reads a record array from hdf5 file'''
         hasit = self.h5f.list_nodes(group)
@@ -830,8 +830,8 @@ The create_ functions should not expect any parameters but have to access data f
                 raise NotImplementedError('Cannot write this data structure into hdf5')
         except:
             var2 = [numpy.array(list(zip(*item[:])), dtype=vdtype) for item in var3]
-        return var2   
-        
+        return var2
+
     def hdf2list(self,group):
         listlength = len([n._v_name for n in self.h5f.iter_nodes(group) if n._v_name.isdigit()])
         mylist = [[]]*listlength
@@ -851,7 +851,7 @@ The create_ functions should not expect any parameters but have to access data f
                     else:
                         mylist[int(n._v_name)] = mylist[int(n._v_name)].tolist()
         return mylist
-                            
+
     def step_into_hdfgroup(self, group):
         '''reads complex datatypes (dict, list, numpy recarray) from the hdf hierarchy
         '''
@@ -866,7 +866,7 @@ The create_ functions should not expect any parameters but have to access data f
             myvar = self.hdf2list(group)
         else: raise NotImplementedError(group._v_name+ ' has unknown data type in hdf5 file.')
         return myvar
-        
+
     def cleanup(self):
         if hasattr(self, 'h5f') and self.h5f is not None and self.h5f.isopen:
             log.debug("object closing closes h5f")
