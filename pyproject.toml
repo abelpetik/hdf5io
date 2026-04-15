@@ -2,7 +2,7 @@
 name = "hdf5io"
 version = "0.1.0"
 description = "Add your description here"
-requires-python = ">=3.13"
+requires-python = ">=3.7"
 dependencies = [
     "future>=0.18.2",
     "numpy>=1.21.5",
